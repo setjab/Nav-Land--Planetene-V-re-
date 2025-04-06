@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Velkommen til Nav Land</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      font-family: Arial, sans-serif;
+    }
+
+    .overlay-text {
+      position: absolute;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #ffffff;
+      font-size: 36px;
+      font-weight: bold;
+      text-align: center;
+      text-shadow:
+        0 1px 0 #ccc,
+        0 2px 0 #ccc,
+        0 3px 0 #ccc,
+        0 4px 0 #ccc,
+        0 5px 0 #ccc,
+        0 6px 0 transparent,
+        0 7px 0 transparent,
+        0 8px 0 transparent,
+        0 9px 0 transparent,
+        0 10px 30px rgba(0, 0, 0, 0.9);
+      z-index: 100;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay-text">Velkommen til Nav Land<br>En dialogbasert enhet</div>
+  <script>
+    const ansatte = [
+      "Finn Erik", "Settar", "Grethe", "Britt", "Siv", "Eivind", "Stian", "Inger",
+      "Karoline", "Christine", "Heidi", "Ståle", "Silje", "Stina", "Asgeir", "Emma",
+      "Mona", "Astrid", "Vibeke", "Unni", "Henriette", "Inger T", "Bente", "Åshild",
+      "Ketil", "Ann Kristin", "Anita E"
+    ];
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const starCount = 1000;
+    const positions = new Float32Array(starCount * 3);
+    const sizes = new Float32Array(starCount);
+    for (let i = 0; i < starCount; i++) {
+      positions[i * 3 + 0] = (Math.random() - 0.5) * 2000;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 2000;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 2000;
+      sizes[i] = Math.random() * 1.5 + 0.5;
+    }
+
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    starGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    const starMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 1.5,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false
+    });
+
+    const starField = new THREE.Points(starGeo, starMaterial);
+    scene.add(starField);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
+
+    const pointLight = new THREE.PointLight(0xffffff, 1);
+    camera.add(pointLight);
+    scene.add(camera);
+
+    const colors = [0xff5733, 0x33ff57, 0x3357ff, 0xff33a1, 0xffa533, 0x8e44ad, 0x1abc9c];
+
+    const planets = [];
+    ansatte.forEach((name, index) => {
+      const size = 14 + Math.random() * 4;
+      const color = colors[index % colors.length];
+      const geometry = new THREE.SphereGeometry(size, 32, 32);
+      const material = new THREE.MeshPhongMaterial({ color });
+      const sphere = new THREE.Mesh(geometry, material);
+
+      const group = new THREE.Group();
+      group.add(sphere);
+
+      const angle = (index / ansatte.length) * Math.PI * 2;
+      const radius = 100 + index * 10;
+      group.userData = {
+        angle,
+        radius,
+        speed: 0.001 + Math.random() * 0.002
+      };
+
+      scene.add(group);
+      planets.push(group);
+
+      const label = createTextSprite(name);
+      label.scale.set(120, 60, 1);
+      group.add(label);
+      label.position.set(0, size + 5, 0);
+    });
+
+    function createTextSprite(message) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 2048;
+      canvas.height = 1024;
+      const context = canvas.getContext('2d');
+      context.font = 'Bold 144px Arial';
+      context.fillStyle = 'white';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(message, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({ map: texture });
+      return new THREE.Sprite(material);
+    }
+
+    camera.position.z = 400;
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      planets.forEach(group => {
+        group.userData.angle += group.userData.speed;
+        const x = Math.cos(group.userData.angle) * group.userData.radius;
+        const z = Math.sin(group.userData.angle) * group.userData.radius;
+        group.position.set(x, 0, z);
+        group.rotation.y += 0.01;
+      });
+
+      const time = Date.now() * 0.001;
+      starMaterial.opacity = 0.5 + 0.3 * Math.sin(time);
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
