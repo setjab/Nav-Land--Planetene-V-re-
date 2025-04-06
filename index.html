@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Velkommen til Nav Land</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <style>
     body {
       margin: 0;
@@ -48,11 +49,19 @@
       "Ketil", "Ann Kristin", "Anita E"
     ];
 
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let selectedObject = null;
+    let offset = new THREE.Vector3();
+    let intersectPlane = new THREE.Plane();
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
 
     const starCount = 1000;
     const positions = new Float32Array(starCount * 3);
@@ -99,12 +108,10 @@
       const group = new THREE.Group();
       group.add(sphere);
 
-      const angle = (index / ansatte.length) * Math.PI * 2;
-      const radius = 100 + index * 10;
       group.userData = {
-        angle,
-        radius,
-        speed: 0.001 + Math.random() * 0.002
+        angle: (index / ansatte.length) * Math.PI * 2,
+        radius: 100 + index * 10,
+        speed: 0.002 + Math.random() * 0.002
       };
 
       scene.add(group);
@@ -136,7 +143,6 @@
 
     function animate() {
       requestAnimationFrame(animate);
-
       planets.forEach(group => {
         group.userData.angle += group.userData.speed;
         const x = Math.cos(group.userData.angle) * group.userData.radius;
@@ -144,14 +150,50 @@
         group.position.set(x, 0, z);
         group.rotation.y += 0.01;
       });
-
-      const time = Date.now() * 0.001;
-      starMaterial.opacity = 0.5 + 0.3 * Math.sin(time);
-
+      planets.forEach(group => {
+        group.rotation.y += 0.01;
+      });
       renderer.render(scene, camera);
     }
-
     animate();
+
+    function onPointerDown(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+      if (intersects.length > 0) {
+        selectedObject = intersects[0].object.parent;
+        intersectPlane.setFromNormalAndCoplanarPoint(
+          camera.getWorldDirection(intersectPlane.normal),
+          selectedObject.position
+        );
+        raycaster.ray.intersectPlane(intersectPlane, offset);
+        offset.sub(selectedObject.position);
+        controls.enabled = false;
+      }
+    }
+
+    function onPointerMove(event) {
+      if (!selectedObject) return;
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      let intersection = new THREE.Vector3();
+      raycaster.ray.intersectPlane(intersectPlane, intersection);
+      selectedObject.position.copy(intersection.sub(offset));
+    }
+
+    function onPointerUp() {
+      selectedObject = null;
+      controls.enabled = true;
+    }
+
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
 
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
