@@ -1,201 +1,379 @@
 <!DOCTYPE html>
 <html lang="no">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Velkommen til Nav Land</title>
+
+  <!-- Three.js + OrbitControls -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background-color: #000;
-      font-family: Arial, sans-serif;
-    }
 
-    .overlay-text {
-      position: absolute;
-      top: 40px;
+  <style>
+    :root {
+      --fg: #ffffff;
+      --bg: #000000;
+      --accent: #e6e6e6;
+      --title-size: clamp(28px, 4vw, 44px);
+      --subtitle-size: clamp(14px, 2vw, 18px);
+      --shadow-heavy: 0 20px 60px rgba(0,0,0,.55);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: radial-gradient(1200px 1200px at 50% 30%, #0b0b12 0%, #050509 45%, #000 100%);
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Helvetica Neue", sans-serif;
+      overflow: hidden;
+    }
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: start center;
+      padding-top: 36px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .title {
+      text-align: center;
+      line-height: 1.2;
+      letter-spacing: .2px;
+      filter: drop-shadow(0 8px 24px rgba(0,0,0,.7));
+      user-select: none;
+    }
+    .title__main {
+      font-size: var(--title-size);
+      font-weight: 800;
+      background: linear-gradient(180deg, #fff, #e9e9ff 65%, #cfd6ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 1px 0 rgba(255,255,255,.25);
+    }
+    .title__sub {
+      margin-top: 6px;
+      font-size: var(--subtitle-size);
+      font-weight: 500;
+      color: var(--accent);
+      opacity: .9;
+    }
+    .footer-hint {
+      position: fixed;
+      bottom: 16px;
       left: 50%;
       transform: translateX(-50%);
-      color: #ffffff;
-      font-size: 36px;
-      font-weight: bold;
-      text-align: center;
-      text-shadow:
-        0 1px 0 #ccc,
-        0 2px 0 #ccc,
-        0 3px 0 #ccc,
-        0 4px 0 #ccc,
-        0 5px 0 #ccc,
-        0 6px 0 transparent,
-        0 7px 0 transparent,
-        0 8px 0 transparent,
-        0 9px 0 transparent,
-        0 10px 30px rgba(0, 0, 0, 0.9);
-      z-index: 100;
+      font-size: 12px;
+      color: rgba(255,255,255,.6);
+      letter-spacing: .3px;
       pointer-events: none;
+      z-index: 10;
+      text-align: center;
+      padding: 6px 10px;
+      backdrop-filter: blur(4px);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border-radius: 10px;
+      box-shadow: var(--shadow-heavy);
     }
   </style>
 </head>
 <body>
-  <div class="overlay-text">Velkommen til Nav Land<br>En dialogbasert enhet</div>
+  <div class="overlay">
+    <div class="title" aria-live="polite">
+      <div class="title__main">Velkommen til Nav Land</div>
+      <div class="title__sub">En dialogorientert enhet — mennesker før systemer</div>
+    </div>
+  </div>
+  <div class="footer-hint">Dra og flytt planeter. Roter scenen med musen.</div>
+
   <script>
-    const ansatte = [
-      "Finn Erik", "Settar", "Grethe", "Britt", "Siv", "Eivind", "Stian", "Inger",
-      "Karoline", "Christine", "Heidi", "Ståle", "Silje", "Stina", "Asgeir", "Emma",
-      "Mona", "Astrid", "Vibeke", "Unni", "Henriette", "Inger T", "Bente", "Åshild",
-      "Ketil", "Ann Kristin", "Anita E"
-    ];
+    // ---------- KONFIG ----------
+    const EMPLOYEES = [
+      "Ann Kristin","Anita","Asgeir","Astrid","Bente","Christine","Eivind","Emma",
+      "Finn Erik","Grethe","Heidi","Henriette","Inger","Inger T","Karoline","Ketil",
+      "Mona","Settar","Silje","Ståle","Stian","Stina","Unni","Vibeke","Åshild"
+    ]; // "Anita E" -> "Anita" (E fjernet)
 
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    let selectedObject = null;
-    let offset = new THREE.Vector3();
-    let intersectPlane = new THREE.Plane();
+    const COLORS = [0xff6b6b, 0x34d399, 0x60a5fa, 0xf472b6, 0xf59e0b, 0x8b5cf6, 0x14b8a6];
 
+    const CAMERA_START_Z = 420;
+    const ORBIT_BASE_RADIUS = 110;
+    const ORBIT_STEP = 12;
+    const PLANET_MIN = 12;
+    const PLANET_VAR = 5;
+
+    // ---------- SCENE ----------
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      5000
+    );
+    camera.position.set(0, 80, CAMERA_START_Z);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.5;
+    controls.zoomSpeed = 0.6;
 
-    const starCount = 1000;
-    const positions = new Float32Array(starCount * 3);
-    const sizes = new Float32Array(starCount);
-    for (let i = 0; i < starCount; i++) {
-      positions[i * 3 + 0] = (Math.random() - 0.5) * 2000;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 2000;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 2000;
-      sizes[i] = Math.random() * 1.5 + 0.5;
+    // Lys
+    scene.add(new THREE.AmbientLight(0xffffff, 0.28));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    keyLight.position.set(2, 4, 2);
+    scene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight(0x90cdf4, 0.4);
+    rimLight.position.set(-3, 5, -2);
+    scene.add(rimLight);
+
+    // ---------- STJERNER MED BLINK ----------
+    // Flere lag som pulserer med ulik fase/frekvens for "twinkle"-effekt
+    const starLayers = [];
+    function addStarLayer(count, size, spread, baseOpacity, amp, speed, phase) {
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        positions[i * 3 + 0] = (Math.random() - 0.5) * spread;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * spread;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: size,
+        depthWrite: false,
+        transparent: true,
+        opacity: baseOpacity
+      });
+      const points = new THREE.Points(geo, mat);
+      scene.add(points);
+      starLayers.push({ points, mat, baseOpacity, amp, speed, phase });
+    }
+    // Tre lag med litt ulike verdier
+    addStarLayer(1200, 1.2, 3200, 0.85, 0.15, 0.9, Math.random() * Math.PI * 2);
+    addStarLayer(800, 1.8, 3000, 0.65, 0.25, 1.3, Math.random() * Math.PI * 2);
+    addStarLayer(500, 2.4, 2800, 0.50, 0.35, 1.7, Math.random() * Math.PI * 2);
+
+    // ---------- TEKST-SPRITE ----------
+    function makeLabelSprite(text) {
+      const padX = 48, padY = 28;
+      const baseFont = 128;
+      const maxWidth = 1600;
+
+      const c = document.createElement("canvas");
+      c.width = 2048; c.height = 1024;
+      const g = c.getContext("2d");
+      g.imageSmoothingEnabled = true;
+
+      // Bakplate/halo for lesbarhet
+      g.fillStyle = "rgba(0,0,0,0.35)";
+      g.fillRect(0, 0, c.width, c.height);
+
+      // Dynamisk fontstørrelse
+      let fontSize = baseFont;
+      g.font = `700 ${fontSize}px Arial`;
+      while (g.measureText(text).width + padX * 2 > maxWidth && fontSize > 64) {
+        fontSize -= 6;
+        g.font = `700 ${fontSize}px Arial`;
+      }
+
+      // Plate bak tekst
+      const textW = g.measureText(text).width;
+      const boxW = Math.min(textW + padX * 2, c.width - 120);
+      const boxH = fontSize + padY * 2;
+      const boxX = (c.width - boxW) / 2;
+      const boxY = (c.height - boxH) / 2;
+
+      g.fillStyle = "rgba(10,12,18,0.55)";
+      roundRect(g, boxX, boxY, boxW, boxH, 48);
+      g.fill();
+
+      g.strokeStyle = "rgba(255,255,255,0.28)";
+      g.lineWidth = 6;
+      g.stroke();
+
+      // Tekst
+      g.fillStyle = "#ffffff";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.shadowColor = "rgba(0,0,0,.65)";
+      g.shadowBlur = 18;
+      g.fillText(text, c.width / 2, c.height / 2);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+      const sprite = new THREE.Sprite(mat);
+
+      sprite.scale.set(140, 70, 1);
+      return sprite;
+    }
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
     }
 
-    const starGeo = new THREE.BufferGeometry();
-    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    starGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    // ---------- PLANETER MED RADIUS-BYTTE ETTER 360° ----------
+    const planetGroups = [];
+    const planetMeshes = [];
+    const orbitRadii = [];
+    for (let i = 0; i < EMPLOYEES.length; i++) {
+      orbitRadii.push(ORBIT_BASE_RADIUS + i * ORBIT_STEP);
+    }
 
-    const starMaterial = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 1.5,
-      transparent: true,
-      opacity: 1,
-      depthWrite: false
-    });
+    const sphereGeoCache = {};
+    function getSphereGeometry(size) {
+      const key = size | 0;
+      if (!sphereGeoCache[key]) sphereGeoCache[key] = new THREE.SphereGeometry(size, 32, 32);
+      return sphereGeoCache[key];
+    }
 
-    const starField = new THREE.Points(starGeo, starMaterial);
-    scene.add(starField);
+    EMPLOYEES.forEach((name, i) => {
+      const size = PLANET_MIN + Math.random() * PLANET_VAR;
+      const color = COLORS[i % COLORS.length];
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
-    scene.add(ambientLight);
-
-    const pointLight = new THREE.PointLight(0xffffff, 1);
-    camera.add(pointLight);
-    scene.add(camera);
-
-    const colors = [0xff5733, 0x33ff57, 0x3357ff, 0xff33a1, 0xffa533, 0x8e44ad, 0x1abc9c];
-
-    const planets = [];
-    ansatte.forEach((name, index) => {
-      const size = 14 + Math.random() * 4;
-      const color = colors[index % colors.length];
-      const geometry = new THREE.SphereGeometry(size, 32, 32);
-      const material = new THREE.MeshPhongMaterial({ color });
-      const sphere = new THREE.Mesh(geometry, material);
+      const sphere = new THREE.Mesh(
+        getSphereGeometry(size),
+        new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.4,
+          metalness: 0.15
+        })
+      );
 
       const group = new THREE.Group();
       group.add(sphere);
 
+      const label = makeLabelSprite(name);
+      label.position.set(0, size + 6, 0);
+      group.add(label);
+
       group.userData = {
-        angle: (index / ansatte.length) * Math.PI * 2,
-        radius: 100 + index * 10,
-        speed: 0.002 + Math.random() * 0.002
+        angle: (i / EMPLOYEES.length) * Math.PI * 2,
+        orbitIndex: i,                                      // nåværende bane-indeks
+        radius: orbitRadii[i],                              // aktuell radius
+        targetRadius: orbitRadii[i],                        // mål-radius (lerpes mot)
+        speed: 0.0018 + Math.random() * 0.0016
       };
 
+      planetGroups.push(group);
+      planetMeshes.push(sphere);
       scene.add(group);
-      planets.push(group);
-
-      const label = createTextSprite(name);
-      label.scale.set(120, 60, 1);
-      group.add(label);
-      label.position.set(0, size + 5, 0);
     });
 
-    function createTextSprite(message) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 2048;
-      canvas.height = 1024;
-      const context = canvas.getContext('2d');
-      context.font = 'Bold 144px Arial';
-      context.fillStyle = 'white';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillText(message, canvas.width / 2, canvas.height / 2);
+    // ---------- INTERAKSJON (DRA-FLYTT) ----------
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let selectedGroup = null;
+    let dragOffset = new THREE.Vector3();
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // horisontalt plan
 
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.SpriteMaterial({ map: texture });
-      return new THREE.Sprite(material);
+    function setMouse(ev) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     }
 
-    camera.position.z = 400;
-
-    function animate() {
-      requestAnimationFrame(animate);
-      planets.forEach(group => {
-        group.userData.angle += group.userData.speed;
-        const x = Math.cos(group.userData.angle) * group.userData.radius;
-        const z = Math.sin(group.userData.angle) * group.userData.radius;
-        group.position.set(x, 0, z);
-        group.rotation.y += 0.01;
-      });
-      planets.forEach(group => {
-        group.rotation.y += 0.01;
-      });
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    function onPointerDown(event) {
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
+    function onPointerDown(ev) {
+      setMouse(ev);
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(scene.children, true);
-      if (intersects.length > 0) {
-        selectedObject = intersects[0].object.parent;
-        intersectPlane.setFromNormalAndCoplanarPoint(
-          camera.getWorldDirection(intersectPlane.normal),
-          selectedObject.position
-        );
-        raycaster.ray.intersectPlane(intersectPlane, offset);
-        offset.sub(selectedObject.position);
+      const hits = raycaster.intersectObjects(planetMeshes, true);
+      if (hits.length) {
+        const sphere = hits[0].object;
+        selectedGroup = planetGroups.find(g => g.children.includes(sphere));
+        const normal = new THREE.Vector3(0, 1, 0);
+        dragPlane.setFromNormalAndCoplanarPoint(normal, selectedGroup.position);
+        const hitPoint = new THREE.Vector3();
+        raycaster.ray.intersectPlane(dragPlane, hitPoint);
+        dragOffset.copy(hitPoint).sub(selectedGroup.position);
         controls.enabled = false;
       }
     }
-
-    function onPointerMove(event) {
-      if (!selectedObject) return;
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
+    function onPointerMove(ev) {
+      if (!selectedGroup) return;
+      setMouse(ev);
       raycaster.setFromCamera(mouse, camera);
-      let intersection = new THREE.Vector3();
-      raycaster.ray.intersectPlane(intersectPlane, intersection);
-      selectedObject.position.copy(intersection.sub(offset));
+      const point = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(dragPlane, point)) {
+        selectedGroup.position.copy(point.sub(dragOffset));
+      }
     }
-
     function onPointerUp() {
-      selectedObject = null;
+      selectedGroup = null;
       controls.enabled = true;
     }
 
-    window.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
 
-    window.addEventListener('resize', () => {
+    // ---------- HJELPEFUNKSJON FOR BYTTE AV ORBIT-INDEX ----------
+    function advanceOrbitIndex(idx) {
+      return (idx + 1) % orbitRadii.length; // roterer til neste "posisjon"
+    }
+
+    // ---------- ANIMASJON ----------
+    let tStart = performance.now();
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const t = (now - tStart) / 1000;
+
+      // Twinkle: moduler lag-opasiteter
+      for (const layer of starLayers) {
+        const osc = Math.sin(t * layer.speed + layer.phase) * layer.amp;
+        const op = THREE.MathUtils.clamp(layer.baseOpacity + osc, 0.15, 1.0);
+        layer.mat.opacity = op;
+      }
+
+      // Planetbevegelser
+      for (const group of planetGroups) {
+        const ud = group.userData;
+
+        // Rotasjon ift. sentrum (hopp over hvis dras)
+        if (group !== selectedGroup) {
+          ud.angle += ud.speed;
+          // Når 360° er nådd: "runde fullført" -> flytt til neste posisjon (bane)
+          if (ud.angle >= Math.PI * 2) {
+            ud.angle -= Math.PI * 2;
+
+            // neste baneindeks (bytte posisjon)
+            ud.orbitIndex = advanceOrbitIndex(ud.orbitIndex);
+            ud.targetRadius = orbitRadii[ud.orbitIndex]; // sett nytt mål
+          }
+        }
+
+        // Lerp radius mot target for smidig overgang
+        ud.radius = THREE.MathUtils.lerp(ud.radius, ud.targetRadius, 0.025);
+
+        // Sett posisjon på nåværende polar-koordinater
+        const x = Math.cos(ud.angle) * ud.radius;
+        const z = Math.sin(ud.angle) * ud.radius;
+        if (group !== selectedGroup) group.position.set(x, 0, z);
+
+        // Egen rotasjon for litt liv
+        group.rotation.y += 0.008;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    requestAnimationFrame(animate);
+
+    // ---------- RESPONSIVE ----------
+    window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
